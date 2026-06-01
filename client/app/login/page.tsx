@@ -42,11 +42,14 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      console.log('🔐 Attempting login with email:', d.email.trim().toLowerCase());
       const res = await api.post('/auth/login', {
         email: d.email.trim().toLowerCase(),
         password: d.password,
         role: selectedRole
       });
+
+      console.log('✅ Login successful:', res.data);
 
       if (res.data.token) {
         saveToken(res.data.token);
@@ -55,16 +58,23 @@ export default function LoginPage() {
 
       const actualRole = res.data.user?.role;
 
+      // ✅ FIXED: Proper role-based routing
       if (actualRole === 'organizer' || actualRole === 'admin') {
+        console.log('📊 Redirecting to organizer dashboard');
         window.location.href = '/dashboard/organizer';
       } else if (actualRole === 'team_owner') {
+        console.log('🏆 Redirecting to team owner dashboard');
         window.location.href = '/dashboard/team-owner';
       } else {
+        console.log('👁️ Redirecting to auctions');
         window.location.href = '/auctions';
       }
 
     } catch (e: any) {
-      setFormError(mapError(e.response?.data?.error || '', e.response?.data));
+      console.error('❌ Login error:', e);
+      const errorMsg = e.response?.data?.error || e.message || 'Login failed.';
+      console.log('Error message:', errorMsg);
+      setFormError(mapError(errorMsg, e.response?.data));
       setLoading(false);
     }
   };
@@ -130,35 +140,62 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <input {...register('email')} type="email" placeholder="Email" className="input-beast"/>
-            <input {...register('password')} type="password" placeholder="Password" className="input-beast"/>
+            <input 
+              {...register('email', { required: 'Email is required' })} 
+              type="email" 
+              placeholder="Email" 
+              className="input-beast"
+              disabled={loading}
+            />
+            {errors.email && <p className="text-destructive text-xs">{errors.email.message}</p>}
+            
+            <input 
+              {...register('password', { required: 'Password is required' })} 
+              type="password" 
+              placeholder="Password" 
+              className="input-beast"
+              disabled={loading}
+            />
+            {errors.password && <p className="text-destructive text-xs">{errors.password.message}</p>}
 
-            {/* ✅ ONLY ADDITION */}
+            {/* ✅ Forgot Password Link */}
             <div className="text-right -mt-2">
               <Link href="/forgot-password" className="text-xs text-primary hover:underline">
                 Forgot Password?
               </Link>
             </div>
 
-            <button type="submit" className="w-full py-3 bg-primary rounded">
+            <button 
+              type="submit" 
+              disabled={loading}
+              className="w-full py-3 bg-primary rounded disabled:opacity-50 disabled:cursor-not-allowed"
+            >
               {loading ? 'Signing In...' : 'Login'}
             </button>
 
-            {formError && (
-              <div className="text-destructive text-xs font-heading bg-destructive/10 rounded-lg px-3 py-2 space-y-1">
-                <p>{formError.text}</p>
-                {formError.hint && <p className="text-muted-foreground font-display">{formError.hint}</p>}
-                {formError.link && (
-                  <Link href={formError.link.href} className="text-primary underline font-heading">
-                    {formError.link.label}
-                  </Link>
-                )}
-              </div>
-            )}
+            {/* ✅ FIXED: Better error display with animation */}
+            <AnimatePresence>
+              {formError && (
+                <motion.div 
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="text-destructive text-xs font-heading bg-destructive/10 rounded-lg px-3 py-2 space-y-1"
+                >
+                  <p className="font-bold">{formError.text}</p>
+                  {formError.hint && <p className="text-muted-foreground font-display text-[11px]">{formError.hint}</p>}
+                  {formError.link && (
+                    <Link href={formError.link.href} className="text-primary underline font-heading block pt-1">
+                      {formError.link.label}
+                    </Link>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </form>
 
           <div className="mt-4 text-center">
-            <Link href="/register">Register</Link>
+            <p className="text-sm text-muted-foreground">Don't have an account? <Link href="/register" className="text-primary hover:underline">Register</Link></p>
           </div>
         </div>
       </div>
