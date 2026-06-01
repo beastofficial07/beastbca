@@ -6,64 +6,97 @@ const cors         = require('cors');
 const http         = require('http');
 const mongoose     = require('mongoose');
 const cookieParser = require('cookie-parser');
+const helmet       = require('helmet');
+const rateLimit    = require('express-rate-limit');
 
 const app    = express();
 const server = http.createServer(app);
+const isProd = process.env.NODE_ENV === 'production';
 
 console.log('\n' + '='.repeat(70));
-console.log('🚀 BEAST CRICKET AUCTION - SERVER STARTING');
+console.log('🚀 BEAST CRICKET AUCTION SERVER');
 console.log('='.repeat(70));
 
-// ── CORS ─────────────────────────────────
+// ── CORS ──────────────────────────────────
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://beastbca-client-production.up.railway.app',
+  'https://beastbca-server-production.up.railway.app',
+];
+
+console.log('✅ CORS Origins:', allowedOrigins);
+
 app.use(cors({
-  origin: '*',
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin) || (isProd && origin?.includes('.railway.app'))) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all for now
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
 }));
+
 app.options('*', cors());
 
-console.log('✅ CORS: Enabled for all origins');
-
-// ── Middleware ──────────────────────────
+// ── Middleware ────────────────────────────
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// ── Debug Logger ────────────────────────
+if (isProd) {
+  app.use(helmet({ contentSecurityPolicy: false }));
+}
+app.disable('x-powered-by');
+app.set('trust proxy', 1);
+
+// ── Request Logger ────────────────────────
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
     const duration = Date.now() - start;
     const status = res.statusCode >= 400 ? '❌' : '✅';
-    console.log(`${status} [${res.statusCode}] ${req.method.toUpperCase().padEnd(6)} ${req.path.padEnd(30)} ${duration}ms`);
+    console.log(`${status} [${res.statusCode}] ${req.method.padEnd(6)} ${req.path.padEnd(30)} ${duration}ms`);
   });
   next();
 });
 
-// ── Health Endpoints ────────────────────
+// ── Health Endpoints ──────────────────────
 app.get('/health', (req, res) => res.json({ ok: true }));
 app.get('/api/health', (req, res) => res.json({ ok: true, db: mongoose.connection.readyState === 1 }));
-app.get('/', (req, res) => res.json({ message: 'BCA Server OK' }));
+app.get('/', (req, res) => res.json({ message: 'BCA Server OK', version: '1.0' }));
 
-// ── Routes ──────────────────────────────
+// ── Routes ────────────────────────────────
 console.log('📍 Loading routes...');
 
-const authRouter = require('./routes/auth');
-app.use('/api/auth', authRouter);
-console.log('✅ /api/auth');
+try {
+  app.use('/api/auth', require('./routes/auth'));
+  console.log('✅ Auth routes');
+} catch (e) {
+  console.error('❌ Auth error:', e.message);
+}
 
-const auctionsRouter = require('./routes/auctions');
-app.use('/api/auctions', auctionsRouter);
-console.log('✅ /api/auctions');
+try {
+  app.use('/api/auctions', require('./routes/auctions'));
+  console.log('✅ Auctions routes');
+} catch (e) {
+  console.error('❌ Auctions error:', e.message);
+}
 
-const adminRouter = require('./routes/admin');
-app.use('/api/admin', adminRouter);
-console.log('✅ /api/admin');
+try {
+  app.use('/api/admin', require('./routes/admin'));
+  console.log('✅ Admin routes');
+} catch (e) {
+  console.error('❌ Admin error:', e.message);
+}
 
-// ── 404 & Errors ────────────────────────
+// ── 404 & Error ───────────────────────────
 app.use((req, res) => {
-  res.status(404).json({ error: 'Not found', path: req.path, method: req.method });
+  console.log('❌ 404:', req.method, req.path);
+  res.status(404).json({ error: 'Not found', path: req.path });
 });
 
 app.use((err, req, res, next) => {
@@ -71,7 +104,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message });
 });
 
-// ── MongoDB ─────────────────────────────
+// ── MongoDB ────────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI;
 if (!MONGODB_URI) {
   console.error('❌ MONGODB_URI not set');
@@ -80,17 +113,26 @@ if (!MONGODB_URI) {
 
 mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
   .then(() => {
-    console.log('✅ MongoDB: Connected');
+    console.log('✅ MongoDB connected');
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, '0.0.0.0', () => {
       console.log('='.repeat(70));
       console.log(`🌍 Server ready on port ${PORT}`);
-      console.log(`🌐 Frontend: https://beastbca-client-production.up.railway.app`);
-      console.log(`📊 Backend: https://beastbca-server-production.up.railway.app`);
+      console.log(`📍 Frontend: https://beastbca-client-production.up.railway.app`);
+      console.log(`📍 Backend: https://beastbca-server-production.up.railway.app`);
       console.log('='.repeat(70) + '\n');
     });
   })
   .catch(err => {
-    console.error('❌ MongoDB failed:', err.message);
+    console.error('❌ MongoDB error:', err.message);
     process.exit(1);
   });
+
+process.on('SIGTERM', () => {
+  console.log('⚠️  Shutting down...');
+  server.close(() => {
+    mongoose.connection.close(false, () => {
+      process.exit(0);
+    });
+  });
+});

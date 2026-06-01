@@ -22,7 +22,7 @@ const BASE = (() => {
   return isDev ? 'http://localhost:5000' : window.location.origin;
 })();
 
-console.log('🌐 API Base:', BASE);
+console.log('🌐 API Base URL:', BASE);
 
 export const imgUrl = (src?: string | null): string => {
   if (!src) return '';
@@ -52,11 +52,11 @@ api.interceptors.request.use((config) => {
 
 api.interceptors.response.use(
   (res) => {
-    console.log(`✅ [${res.status}] Response:`, res.data);
+    console.log(`✅ [${res.status}]`, res.data);
     return res;
   },
   (err) => {
-    console.error(`❌ [${err.response?.status}] Error:`, err.response?.data?.error || err.message);
+    console.error(`❌ [${err.response?.status}]`, err.response?.data?.error || err.message);
     if (err.response?.status === 401 && typeof window !== 'undefined') {
       const p = window.location.pathname;
       const pub = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password'];
