@@ -21,20 +21,26 @@ const app    = express();
 const server = http.createServer(app);
 const isProd = process.env.NODE_ENV === 'production';
 
-console.log('🔍 Server Configuration:');
-console.log('   NODE_ENV:', process.env.NODE_ENV);
-console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || '(not set)');
+console.log('\n' + '='.repeat(60));
+console.log('🔍 SERVER CONFIGURATION:');
+console.log('='.repeat(60));
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('FRONTEND_URL:', process.env.FRONTEND_URL || '❌ NOT SET!');
+console.log('='.repeat(60) + '\n');
 
 // ── CORS (COMPLETE FIX) ─────────────────
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
   'http://127.0.0.1:3000',
+  'https://beastbca-client-production.up.railway.app',
   process.env.FRONTEND_URL,
-  'https://bca-auction-production-1.up.railway.app',
 ].filter(Boolean);
 
-console.log('🌐 Allowed CORS origins:', allowedOrigins);
+console.log('🌐 Allowed CORS origins:');
+allowedOrigins.forEach((origin, i) => {
+  console.log(`   ${i + 1}. ${origin}`);
+});
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -47,10 +53,10 @@ const corsOptions = {
     // Allow if origin is in whitelist OR in production allow all Railway domains
     if (allowedOrigins.includes(origin) || 
         (isProd && origin.includes('.railway.app'))) {
-      console.log('✅ Allowed origin:', origin);
+      console.log(`✅ CORS Allowed origin: ${origin}`);
       callback(null, true);
     } else {
-      console.log('⚠️  Note: origin', origin, '(still allowing for development)');
+      console.log(`⚠️  Note: origin ${origin} (allowing anyway)`);
       callback(null, true); // Allow all for now
     }
   },
@@ -73,7 +79,7 @@ const io = new Server(server, {
           (isProd && origin.includes('.railway.app'))) {
         callback(null, true);
       } else {
-        callback(null, true); // Allow but log
+        callback(null, true);
       }
     },
     methods: ['GET', 'POST'],
@@ -109,7 +115,10 @@ app.use(cookieParser());
 
 // ── Debug middleware ────────────────────
 app.use((req, res, next) => {
-  console.log(`📨 ${req.method} ${req.path}`);
+  console.log(`📨 [${new Date().toISOString()}] ${req.method} ${req.path}`);
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log(`   Body:`, JSON.stringify(req.body).substring(0, 100));
+  }
   next();
 });
 
@@ -134,13 +143,31 @@ app.use('/uploads', express.static(uploadsDir, {
 }));
 
 // ── Routes ──────────────────────────────
-console.log('📍 Loading routes...');
-app.use('/api/auth', require('./routes/auth'));
-console.log('✅ Auth routes loaded');
-app.use('/api/auctions', require('./routes/auctions'));
-console.log('✅ Auctions routes loaded');
-app.use('/api/admin', require('./routes/admin'));
-console.log('✅ Admin routes loaded');
+console.log('📍 Loading API routes...\n');
+
+try {
+  const authRouter = require('./routes/auth');
+  app.use('/api/auth', authRouter);
+  console.log('✅ /api/auth routes loaded');
+} catch (err) {
+  console.error('❌ Failed to load auth routes:', err.message);
+}
+
+try {
+  const auctionsRouter = require('./routes/auctions');
+  app.use('/api/auctions', auctionsRouter);
+  console.log('✅ /api/auctions routes loaded');
+} catch (err) {
+  console.error('❌ Failed to load auctions routes:', err.message);
+}
+
+try {
+  const adminRouter = require('./routes/admin');
+  app.use('/api/admin', adminRouter);
+  console.log('✅ /api/admin routes loaded\n');
+} catch (err) {
+  console.error('❌ Failed to load admin routes:', err.message);
+}
 
 // ── Health check ────────────────────────
 app.get('/api/health', (req, res) => {
@@ -161,10 +188,11 @@ app.get('/', (req, res) => {
     message: 'BCA Auction Backend API',
     status: 'running',
     env: process.env.NODE_ENV,
+    frontend: process.env.FRONTEND_URL,
     endpoints: {
       health: '/api/health',
-      auth: '/api/auth/login (POST)',
-      register: '/api/auth/register (POST)',
+      login: 'POST /api/auth/login',
+      register: 'POST /api/auth/register',
       auctions: '/api/auctions/*',
       admin: '/api/admin/*',
     }
@@ -173,17 +201,25 @@ app.get('/', (req, res) => {
 
 // ── 404 handler ─────────────────────────
 app.use((req, res) => {
-  console.log('❌ 404:', req.method, req.url);
+  console.log('❌ 404 Not Found:', req.method, req.url);
   res.status(404).json({ 
     error: `${req.method} ${req.url} not found`,
-    availableRoutes: ['/api/auth/login', '/api/auth/register', '/api/auctions', '/api/admin', '/health']
+    availableRoutes: {
+      login: 'POST /api/auth/login',
+      register: 'POST /api/auth/register',
+      health: 'GET /api/health',
+      auctions: 'GET /api/auctions/*',
+      admin: 'GET /api/admin/*'
+    }
   });
 });
 
 // ── Error handler ───────────────────────
 app.use((err, req, res, next) => {
   console.error('❌ Server error:', err.message);
-  console.error(err.stack);
+  if (!isProd) {
+    console.error(err.stack);
+  }
   res.status(err.status || 500).json({ 
     error: isProd ? 'Server error' : err.message,
     ...(isProd ? {} : { stack: err.stack })
@@ -204,12 +240,13 @@ mongoose.connect(MONGODB_URI, {
   socketTimeoutMS: 45000,
 })
 .then(async () => {
-  console.log('✅ MongoDB connected');
+  console.log('✅ MongoDB connected\n');
 
   // Verify SMTP connection on startup (non-fatal - don't fail deployment)
   try {
     const { verifyTransporter, isEmailConfigured } = require('./utils/email');
     if (isEmailConfigured()) {
+      console.log('📧 Verifying email service...');
       await verifyTransporter();
     } else {
       console.warn('⚠️  Email not configured - email features will be disabled');
@@ -229,8 +266,10 @@ mongoose.connect(MONGODB_URI, {
     console.log(`🌍 Port: ${PORT}`);
     console.log(`🔧 Environment: ${process.env.NODE_ENV}`);
     console.log(`📊 MongoDB: Connected`);
-    console.log(`🔐 CORS Origins:`, allowedOrigins);
+    console.log(`🌐 Frontend URL: ${process.env.FRONTEND_URL || 'Not set'}`);
+    console.log(`🔐 CORS Origins: ${allowedOrigins.length} allowed`);
     console.log('='.repeat(60) + '\n');
+    console.log('Ready to accept requests!\n');
   });
 })
 .catch(err => {
