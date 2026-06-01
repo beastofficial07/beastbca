@@ -1,241 +1,165 @@
 'use client';
-
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import { FiMail, FiLock, FiUser, FiEye, FiEyeOff } from 'react-icons/fi';
-import { useAuth } from '@/hooks/useAuth';
+import api, { saveToken } from '@/lib/api';
+import GoldParticles from '@/components/beast/GoldParticles';
+import FireSparkles from '@/components/beast/FireSparkles';
+import BeastLogo from '@/components/beast/BeastLogo';
+
+type F = { email: string; password: string };
+
+const ROLES = [
+  { id:'organizer',  icon:'🎬', label:'Organizer',  color:'from-amber-500/30 to-yellow-600/10', tagline:'Command Center Access' },
+  { id:'team_owner', icon:'🏆', label:'Team Owner', color:'from-blue-500/30 to-cyan-600/10',   tagline:'War Room Access' },
+  { id:'viewer',     icon:'👁️', label:'Viewer',     color:'from-emerald-500/30 to-green-600/10',tagline:'Live Arena Access' },
+];
+
+function mapError(msg: string, data?: any) {
+  if (msg.includes('No account') || msg.includes('not found'))
+    return { text:'No account with this email.', hint:'Check spelling or register first.', link:{ label:'Register →', href:'/register' } };
+  if (data?.notVerified || msg.includes('not verified') || msg.includes('verify'))
+    return { text:'Email not verified.', hint:'Check your inbox and click the verification link.', link:{ label:'Resend verification →', href:'/register' } };
+  if (msg.includes('Incorrect') || msg.includes('password') || msg.includes('Wrong'))
+    return { text:'Wrong password.', hint:'Check caps lock or reset below.', link:{ label:'Forgot password →', href:'/forgot-password' } };
+  return { text: msg || 'Login failed.', hint:'' };
+}
 
 export default function LoginPage() {
-  const router = useRouter();
-  const { login } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [role, setRole] = useState<'organizer' | 'team_owner' | 'viewer'>('viewer');
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [loading,      setLoading]      = useState(false);
+  const [selectedRole, setSelectedRole] = useState('');
+  const [formError,    setFormError]    = useState<any>(null);
+  const { register, handleSubmit, formState:{ errors } } = useForm<F>();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+  const onSubmit = async (d: F) => {
+    if (!selectedRole) {
+      setFormError({ text:'Please select your role first.' });
+      return;
+    }
+
+    setFormError(null);
     setLoading(true);
 
     try {
-      await login(email, password, role);
-      
-      // Redirect based on role
-      if (role === 'organizer') {
-        router.push('/dashboard/organizer');
-      } else if (role === 'team_owner') {
-        router.push('/dashboard/team-owner');
-      } else {
-        router.push('/auctions');
+      const res = await api.post('/auth/login', {
+        email: d.email.trim().toLowerCase(),
+        password: d.password,
+        role: selectedRole
+      });
+
+      if (res.data.token) {
+        saveToken(res.data.token);
+        localStorage.setItem('role', res.data.user.role);
       }
-    } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed');
-    } finally {
+
+      const actualRole = res.data.user?.role;
+
+      if (actualRole === 'organizer' || actualRole === 'admin') {
+        window.location.href = '/dashboard/organizer';
+      } else if (actualRole === 'team_owner') {
+        window.location.href = '/dashboard/team-owner';
+      } else {
+        window.location.href = '/auctions';
+      }
+
+    } catch (e: any) {
+      setFormError(mapError(e.response?.data?.error || '', e.response?.data));
       setLoading(false);
     }
   };
 
+  const chosen = ROLES.find(r => r.id === selectedRole);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 mb-4">
-            <span className="text-2xl font-bold text-gray-900">🏏</span>
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
-          <p className="text-gray-400">Login to Beast Cricket Auction</p>
+    <div className="relative min-h-screen flex items-center justify-center bg-background overflow-hidden">
+      <div className="absolute inset-0 bg-cover bg-center opacity-20" style={{ backgroundImage:"url('/stadium-bg.jpg')" }}/>
+      <div className="absolute inset-0" style={{ background:'radial-gradient(ellipse at center,transparent 20%,hsl(222 47% 6% / 0.95) 70%)' }}/>
+      {[{ left:'10%', rotate:'-12deg' },{ left:'90%', rotate:'12deg' }].map((b,i)=>(
+        <div key={i} className="absolute top-0 pointer-events-none"
+          style={{ left:b.left,width:120,height:'60vh',
+            background:'linear-gradient(180deg,hsla(45,100%,90%,0.8) 0%,transparent 100%)',
+            transform:`rotate(${b.rotate})`,
+            transformOrigin:'top center',
+            filter:'blur(25px)',
+            opacity:0.06 }}/>
+      ))}
+      <GoldParticles/>
+      <FireSparkles/>
+
+      <div className="relative z-10 w-full max-w-md mx-4">
+        <div className="flex justify-center mb-5 opacity-0 animate-slide-up">
+          <BeastLogo size={100} glow float3d href="/"/>
         </div>
 
-        {/* Login Form */}
-        <div className="bg-gray-800/50 backdrop-blur-sm rounded-2xl border border-gray-700 p-8 shadow-2xl">
-          {error && (
-            <div className="mb-6 p-4 rounded-lg bg-red-500/10 border border-red-500/50 text-red-400 text-sm">
-              <p>{error}</p>
-              {error.toLowerCase().includes('verif') && (
-                <p className="mt-2 text-xs text-red-300">
-                  Check your inbox for a verification email, or{' '}
-                  <Link href="/register" className="underline hover:text-red-200">
-                    register again
-                  </Link>{' '}
-                  to resend it.
-                </p>
-              )}
-              {error.toLowerCase().includes('password') && (
-                <p className="mt-2 text-xs text-red-300">
-                  Forgot your password?{' '}
-                  <Link href="/forgot-password" className="underline hover:text-red-200">
-                    Reset it here
-                  </Link>
-                  .
-                </p>
-              )}
+        {chosen && (
+          <div className="flex justify-center mb-4 opacity-0 animate-slide-up">
+            <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r ${chosen.color} border-gold-subtle`}>
+              <span className="text-lg">{chosen.icon}</span>
+              <span className="font-heading text-sm uppercase tracking-[0.15em] text-primary">{chosen.label}</span>
+              <span className="text-muted-foreground text-xs font-display">— {chosen.tagline}</span>
             </div>
-          )}
+          </div>
+        )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Email Input */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FiMail className="text-gray-400" size={20} />
-                </div>
-                <input
-                  type="email"
-                  required
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-lg bg-gray-800/50 border border-gray-700 
-                           text-white placeholder-gray-400 focus:outline-none focus:ring-2 
-                           focus:ring-yellow-500/50 focus:border-yellow-500 transition-all"
-                />
-              </div>
-            </div>
+        <div className="bg-glass-premium rounded-xl p-7 gold-edge opacity-0 animate-slide-up">
+          <h2 className="font-heading text-2xl uppercase tracking-wider text-center mb-1 text-foreground">
+            Welcome Back
+          </h2>
 
-            {/* Password Input */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <FiLock className="text-gray-400" size={20} />
-                </div>
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  placeholder="Enter password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-12 py-3 rounded-lg bg-gray-800/50 border border-gray-700 
-                           text-white placeholder-gray-400 focus:outline-none focus:ring-2 
-                           focus:ring-yellow-500/50 focus:border-yellow-500 transition-all"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 
-                           hover:text-gray-300 transition-colors"
-                >
-                  {showPassword ? <FiEyeOff size={20} /> : <FiEye size={20} />}
-                </button>
-              </div>
-            </div>
+          <p className="text-center text-muted-foreground text-sm mb-5 font-display">
+            Select your role to continue
+          </p>
 
-            {/* Forgot Password — prominent full-width button */}
-            <div>
-              <Link
-                href="/forgot-password"
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg
-                           border border-yellow-500/50 text-yellow-400 text-sm font-medium
-                           hover:bg-yellow-500/10 hover:border-yellow-400 hover:text-yellow-300
-                           transition-all duration-200"
+          <div className="grid grid-cols-3 gap-2 mb-5">
+            {ROLES.map(r => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => { setSelectedRole(r.id); setFormError(null); }}
+                className={`relative rounded-lg p-3 text-center transition-all duration-300 ${
+                  selectedRole===r.id ? 'border-gold glow-gold' : 'border-gold-subtle'
+                }`}
               >
-                <FiLock size={15} />
-                🔐 Forgot Password?
+                <div className="text-2xl mb-1">{r.icon}</div>
+                <div className="font-heading text-[10px] uppercase tracking-wider">
+                  {r.label}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <input {...register('email')} type="email" placeholder="Email" className="input-beast"/>
+            <input {...register('password')} type="password" placeholder="Password" className="input-beast"/>
+
+            {/* ✅ ONLY ADDITION */}
+            <div className="text-right -mt-2">
+              <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+                Forgot Password?
               </Link>
             </div>
 
-            {/* Role Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-3">
-                Login As
-              </label>
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setRole('viewer')}
-                  className={`p-3 rounded-lg border-2 transition-all ${
-                    role === 'viewer'
-                      ? 'border-yellow-500 bg-yellow-500/10 text-yellow-400'
-                      : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600'
-                  }`}
-                >
-                  <FiEye className="mx-auto mb-1" size={20} />
-                  <span className="text-xs font-medium">Viewer</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setRole('team_owner')}
-                  className={`p-3 rounded-lg border-2 transition-all ${
-                    role === 'team_owner'
-                      ? 'border-yellow-500 bg-yellow-500/10 text-yellow-400'
-                      : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600'
-                  }`}
-                >
-                  <FiUser className="mx-auto mb-1" size={20} />
-                  <span className="text-xs font-medium">Team Owner</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setRole('organizer')}
-                  className={`p-3 rounded-lg border-2 transition-all ${
-                    role === 'organizer'
-                      ? 'border-yellow-500 bg-yellow-500/10 text-yellow-400'
-                      : 'border-gray-700 bg-gray-800/50 text-gray-400 hover:border-gray-600'
-                  }`}
-                >
-                  <span className="mx-auto mb-1 text-xl">🎯</span>
-                  <span className="text-xs font-medium">Organizer</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Submit Button */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3 px-4 rounded-lg bg-gradient-to-r from-yellow-400 to-yellow-600 
-                       text-gray-900 font-semibold hover:from-yellow-500 hover:to-yellow-700 
-                       focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 
-                       focus:ring-offset-gray-900 transition-all disabled:opacity-50 
-                       disabled:cursor-not-allowed shadow-lg hover:shadow-yellow-500/25"
-            >
-              {loading ? (
-                <span className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-gray-900" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Logging in...
-                </span>
-              ) : (
-                'Login'
-              )}
+            <button type="submit" className="w-full py-3 bg-primary rounded">
+              {loading ? 'Signing In...' : 'Login'}
             </button>
+
+            {formError && (
+              <div className="text-destructive text-xs font-heading bg-destructive/10 rounded-lg px-3 py-2 space-y-1">
+                <p>{formError.text}</p>
+                {formError.hint && <p className="text-muted-foreground font-display">{formError.hint}</p>}
+                {formError.link && (
+                  <Link href={formError.link.href} className="text-primary underline font-heading">
+                    {formError.link.label}
+                  </Link>
+                )}
+              </div>
+            )}
           </form>
 
-          {/* Register Link */}
-          <div className="mt-6 text-center">
-            <p className="text-gray-400 text-sm">
-              Don't have an account?{' '}
-              <Link href="/register" className="text-yellow-400 hover:text-yellow-300 font-medium transition-colors">
-                Register here
-              </Link>
-            </p>
-          </div>
-
-          {/* Back to Home */}
           <div className="mt-4 text-center">
-            <Link href="/" className="text-gray-500 hover:text-gray-400 text-sm transition-colors">
-              ← Back to Home
-            </Link>
+            <Link href="/register">Register</Link>
           </div>
-        </div>
-
-        {/* Additional Info */}
-        <div className="mt-6 text-center text-xs text-gray-500">
-          <p>By logging in, you agree to our Terms of Service and Privacy Policy</p>
         </div>
       </div>
     </div>
