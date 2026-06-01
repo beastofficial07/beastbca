@@ -81,7 +81,7 @@ router.post('/register', async (req, res) => {
     });
 
   } catch (err) {
-    console.log("REGISTER ERROR:", err);
+    console.log("❌ REGISTER ERROR:", err);
     return res.status(500).json({ error: 'Register failed.' });
   }
 });
@@ -120,7 +120,7 @@ router.post('/verify-email', async (req, res) => {
     return res.json({ success: true, message: 'Email verified successfully. You can now log in.' });
 
   } catch (err) {
-    console.log("VERIFY EMAIL ERROR:", err);
+    console.log("❌ VERIFY EMAIL ERROR:", err);
     return res.status(500).json({ error: 'Verification failed.' });
   }
 });
@@ -171,7 +171,7 @@ router.post('/resend-verification', async (req, res) => {
     return res.json({ success: true, message: 'Verification email resent. Check your inbox.' });
 
   } catch (err) {
-    console.log("RESEND VERIFICATION ERROR:", err);
+    console.log("❌ RESEND VERIFICATION ERROR:", err);
     return res.status(500).json({ error: 'Failed to resend verification email.' });
   }
 });
@@ -182,22 +182,40 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password, role } = req.body;
 
+    console.log('🔐 LOGIN ATTEMPT:', email, 'as role:', role);
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
     const emailClean = email.toLowerCase().trim();
 
     const user = await User.findOne({ email: emailClean });
 
     if (!user) {
+      console.log('❌ User not found:', emailClean);
       return res.status(401).json({ error: 'No account found.' });
+    }
+
+    console.log('✅ User found:', user.email);
+    console.log('   Verified:', user.isVerified);
+    console.log('   Blocked:', user.isBlocked);
+
+    if (user.isBlocked) {
+      console.log('❌ User is blocked:', emailClean);
+      return res.status(403).json({ error: 'Account is blocked. Contact support.' });
     }
 
     const ok = await user.comparePassword(password);
 
     if (!ok) {
+      console.log('❌ Wrong password for:', emailClean);
       return res.status(401).json({ error: 'Wrong password.' });
     }
 
     // Block login if email is not verified
     if (!user.isVerified) {
+      console.log('❌ Email not verified:', emailClean);
       return res.status(403).json({
         error: 'Email not verified. Please check your inbox and verify your email before logging in.',
         notVerified: true,
@@ -220,10 +238,13 @@ router.post('/login', async (req, res) => {
 
     const updatedUser = await User.findById(user._id);
 
+    console.log('✅ LOGIN SUCCESS:', emailClean, 'role:', finalRole);
+
     return setCookieAndRespond(res, accessToken, refreshToken, updatedUser);
 
   } catch (err) {
-    console.log("LOGIN ERROR:", err);
+    console.log("❌ LOGIN ERROR:", err);
+    console.log("   Stack:", err.stack);
     return res.status(500).json({ error: 'Login failed.' });
   }
 });
@@ -276,7 +297,7 @@ router.post('/forgot-password', async (req, res) => {
     return res.json({ success: true, message: 'If that email exists, a reset link has been sent.' });
 
   } catch (err) {
-    console.log("FORGOT PASSWORD ERROR:", err);
+    console.log("❌ FORGOT PASSWORD ERROR:", err);
     return res.status(500).json({ error: 'Failed to process forgot password request.' });
   }
 });
@@ -323,7 +344,7 @@ router.post('/reset-password', async (req, res) => {
     return res.json({ success: true, message: 'Password reset successfully. You can now log in.' });
 
   } catch (err) {
-    console.log("RESET PASSWORD ERROR:", err);
+    console.log("❌ RESET PASSWORD ERROR:", err);
     return res.status(500).json({ error: 'Password reset failed.' });
   }
 });
@@ -353,7 +374,7 @@ router.get('/me', authenticate, async (req, res) => {
     });
 
   } catch (err) {
-    console.log("ME ERROR:", err);
+    console.log("❌ ME ERROR:", err);
     return res.status(500).json({ error: 'Server error' });
   }
 });
@@ -396,7 +417,7 @@ router.put('/profile', authenticate, async (req, res) => {
     });
 
   } catch (err) {
-    console.log("UPDATE PROFILE ERROR:", err);
+    console.log("❌ UPDATE PROFILE ERROR:", err);
     return res.status(500).json({ error: 'Failed to update profile.' });
   }
 });
@@ -438,7 +459,7 @@ router.put('/change-password', authenticate, async (req, res) => {
     });
 
   } catch (err) {
-    console.log("CHANGE PASSWORD ERROR:", err);
+    console.log("❌ CHANGE PASSWORD ERROR:", err);
     return res.status(500).json({ error: 'Failed to change password.' });
   }
 });
@@ -469,7 +490,7 @@ router.delete('/account', authenticate, async (req, res) => {
     });
 
   } catch (err) {
-    console.log("DELETE ACCOUNT ERROR:", err);
+    console.log("❌ DELETE ACCOUNT ERROR:", err);
     return res.status(500).json({ error: 'Failed to delete account.' });
   }
 });
