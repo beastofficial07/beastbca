@@ -21,12 +21,17 @@ const app    = express();
 const server = http.createServer(app);
 const isProd = process.env.NODE_ENV === 'production';
 
+console.log('🔍 Server Configuration:');
+console.log('   NODE_ENV:', process.env.NODE_ENV);
+console.log('   FRONTEND_URL:', process.env.FRONTEND_URL || '(not set)');
+
 // ── CORS (COMPLETE FIX) ─────────────────
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
+  'http://127.0.0.1:3000',
   process.env.FRONTEND_URL,
-  'https://bca-auction-production-1.up.railway.app', // ✅ Add your Railway frontend URL
+  'https://bca-auction-production-1.up.railway.app',
 ].filter(Boolean);
 
 console.log('🌐 Allowed CORS origins:', allowedOrigins);
@@ -34,15 +39,19 @@ console.log('🌐 Allowed CORS origins:', allowedOrigins);
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) return callback(null, true);
+    if (!origin) {
+      console.log('✅ No origin header - allowing');
+      return callback(null, true);
+    }
     
     // Allow if origin is in whitelist OR in production allow all Railway domains
     if (allowedOrigins.includes(origin) || 
         (isProd && origin.includes('.railway.app'))) {
+      console.log('✅ Allowed origin:', origin);
       callback(null, true);
     } else {
-      console.log('⚠️ Blocked origin:', origin);
-      callback(null, true); // ✅ Still allow but log it
+      console.log('⚠️  Note: origin', origin, '(still allowing for development)');
+      callback(null, true); // Allow all for now
     }
   },
   credentials: true,
@@ -98,6 +107,12 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
+// ── Debug middleware ────────────────────
+app.use((req, res, next) => {
+  console.log(`📨 ${req.method} ${req.path}`);
+  next();
+});
+
 // ── Rate limits ─────────────────────────
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -119,9 +134,13 @@ app.use('/uploads', express.static(uploadsDir, {
 }));
 
 // ── Routes ──────────────────────────────
+console.log('📍 Loading routes...');
 app.use('/api/auth', require('./routes/auth'));
+console.log('✅ Auth routes loaded');
 app.use('/api/auctions', require('./routes/auctions'));
+console.log('✅ Auctions routes loaded');
 app.use('/api/admin', require('./routes/admin'));
+console.log('✅ Admin routes loaded');
 
 // ── Health check ────────────────────────
 app.get('/api/health', (req, res) => {
@@ -141,9 +160,11 @@ app.get('/', (req, res) => {
   res.json({ 
     message: 'BCA Auction Backend API',
     status: 'running',
+    env: process.env.NODE_ENV,
     endpoints: {
       health: '/api/health',
-      auth: '/api/auth/*',
+      auth: '/api/auth/login (POST)',
+      register: '/api/auth/register (POST)',
       auctions: '/api/auctions/*',
       admin: '/api/admin/*',
     }
@@ -155,7 +176,7 @@ app.use((req, res) => {
   console.log('❌ 404:', req.method, req.url);
   res.status(404).json({ 
     error: `${req.method} ${req.url} not found`,
-    availableRoutes: ['/api/auth', '/api/auctions', '/api/admin']
+    availableRoutes: ['/api/auth/login', '/api/auth/register', '/api/auctions', '/api/admin', '/health']
   });
 });
 
@@ -177,6 +198,7 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
+console.log('🔗 Connecting to MongoDB...');
 mongoose.connect(MONGODB_URI, {
   serverSelectionTimeoutMS: 5000,
   socketTimeoutMS: 45000,
@@ -201,9 +223,14 @@ mongoose.connect(MONGODB_URI, {
   
   const PORT = process.env.PORT || 5000;
   server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    console.log(`🌐 Environment: ${process.env.NODE_ENV}`);
-    console.log(`🔗 Allowed origins:`, allowedOrigins);
+    console.log('\n' + '='.repeat(60));
+    console.log('🚀 SERVER STARTED SUCCESSFULLY');
+    console.log('='.repeat(60));
+    console.log(`🌍 Port: ${PORT}`);
+    console.log(`🔧 Environment: ${process.env.NODE_ENV}`);
+    console.log(`📊 MongoDB: Connected`);
+    console.log(`🔐 CORS Origins:`, allowedOrigins);
+    console.log('='.repeat(60) + '\n');
   });
 })
 .catch(err => {
