@@ -42,38 +42,60 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      console.log('🔐 Attempting login with email:', d.email.trim().toLowerCase());
+      console.log('🔐 Attempting login...');
+      console.log('📧 Email:', d.email.trim().toLowerCase());
+      console.log('🎭 Role:', selectedRole);
+      
       const res = await api.post('/auth/login', {
         email: d.email.trim().toLowerCase(),
         password: d.password,
         role: selectedRole
       });
 
-      console.log('✅ Login successful:', res.data);
+      console.log('✅ Login successful!');
+      console.log('📦 Response:', res.data);
 
       if (res.data.token) {
+        console.log('🔑 Saving token to localStorage');
         saveToken(res.data.token);
         localStorage.setItem('role', res.data.user.role);
       }
 
       const actualRole = res.data.user?.role;
+      console.log('👤 User role:', actualRole);
 
-      // ✅ FIXED: Proper role-based routing
+      // Proper role-based routing
       if (actualRole === 'organizer' || actualRole === 'admin') {
         console.log('📊 Redirecting to organizer dashboard');
-        window.location.href = '/dashboard/organizer';
+        setTimeout(() => {
+          window.location.href = '/dashboard/organizer';
+        }, 500);
       } else if (actualRole === 'team_owner') {
         console.log('🏆 Redirecting to team owner dashboard');
-        window.location.href = '/dashboard/team-owner';
+        setTimeout(() => {
+          window.location.href = '/dashboard/team-owner';
+        }, 500);
       } else {
         console.log('👁️ Redirecting to auctions');
-        window.location.href = '/auctions';
+        setTimeout(() => {
+          window.location.href = '/auctions';
+        }, 500);
       }
 
     } catch (e: any) {
-      console.error('❌ Login error:', e);
-      const errorMsg = e.response?.data?.error || e.message || 'Login failed.';
-      console.log('Error message:', errorMsg);
+      console.error('❌ Login failed!');
+      console.error('Error object:', e);
+      console.error('Status:', e.response?.status);
+      console.error('Error message:', e.response?.data?.error);
+      console.error('Full error data:', e.response?.data);
+      
+      let errorMsg = 'Login failed.';
+      if (e.response?.data?.error) {
+        errorMsg = e.response.data.error;
+      } else if (e.message) {
+        errorMsg = e.message;
+      }
+      
       setFormError(mapError(errorMsg, e.response?.data));
       setLoading(false);
     }
@@ -140,25 +162,28 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-            <input 
-              {...register('email', { required: 'Email is required' })} 
-              type="email" 
-              placeholder="Email" 
-              className="input-beast"
-              disabled={loading}
-            />
-            {errors.email && <p className="text-destructive text-xs">{errors.email.message}</p>}
+            <div>
+              <input 
+                {...register('email', { required: 'Email is required' })} 
+                type="email" 
+                placeholder="Email" 
+                className="input-beast w-full"
+                disabled={loading}
+              />
+              {errors.email && <p className="text-destructive text-xs mt-1">{errors.email.message}</p>}
+            </div>
             
-            <input 
-              {...register('password', { required: 'Password is required' })} 
-              type="password" 
-              placeholder="Password" 
-              className="input-beast"
-              disabled={loading}
-            />
-            {errors.password && <p className="text-destructive text-xs">{errors.password.message}</p>}
+            <div>
+              <input 
+                {...register('password', { required: 'Password is required' })} 
+                type="password" 
+                placeholder="Password" 
+                className="input-beast w-full"
+                disabled={loading}
+              />
+              {errors.password && <p className="text-destructive text-xs mt-1">{errors.password.message}</p>}
+            </div>
 
-            {/* ✅ Forgot Password Link */}
             <div className="text-right -mt-2">
               <Link href="/forgot-password" className="text-xs text-primary hover:underline">
                 Forgot Password?
@@ -168,19 +193,18 @@ export default function LoginPage() {
             <button 
               type="submit" 
               disabled={loading}
-              className="w-full py-3 bg-primary rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full py-3 bg-primary rounded disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
             >
               {loading ? 'Signing In...' : 'Login'}
             </button>
 
-            {/* ✅ FIXED: Better error display with animation */}
             <AnimatePresence>
               {formError && (
                 <motion.div 
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
-                  className="text-destructive text-xs font-heading bg-destructive/10 rounded-lg px-3 py-2 space-y-1"
+                  className="text-destructive text-xs font-heading bg-destructive/10 rounded-lg px-3 py-2 space-y-1 border border-destructive/20"
                 >
                   <p className="font-bold">{formError.text}</p>
                   {formError.hint && <p className="text-muted-foreground font-display text-[11px]">{formError.hint}</p>}
@@ -195,7 +219,7 @@ export default function LoginPage() {
           </form>
 
           <div className="mt-4 text-center">
-            <p className="text-sm text-muted-foreground">Don't have an account? <Link href="/register" className="text-primary hover:underline">Register</Link></p>
+            <p className="text-sm text-muted-foreground">Don't have an account? <Link href="/register" className="text-primary hover:underline font-heading">Register</Link></p>
           </div>
         </div>
       </div>
