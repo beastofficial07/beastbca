@@ -14,27 +14,33 @@ export const clearToken = () => {
   try { localStorage.removeItem(TOKEN_KEY); } catch {}
 };
 
-// ✅ FIXED: Use environment variable directly, not Next.js rewrite
-// baseURL includes /api so all route paths are relative (e.g. '/auctions/my')
-const BASE = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
+// ✅ FIXED: Use environment variable directly with proper fallback
+const BASE = (() => {
+  if (typeof window === 'undefined') return 'http://localhost:5000';
+  
+  const env = process.env.NEXT_PUBLIC_API_URL;
+  if (env) return env.replace(/\/+$/, '');
+  
+  // Fallback: detect from current URL in production
+  const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  return isDev ? 'http://localhost:5000' : `${window.location.protocol}//${window.location.host}`;
+})();
 
-/**
- * Resolve a player/team image URL.
- * - Cloudinary / external URLs (start with http) → returned as-is
- * - Local /uploads/ paths → prepend the backend base URL
- * - null / undefined → return empty string (caller shows fallback)
- */
+console.log('🌐 API Base URL:', BASE);
+
 export const imgUrl = (src?: string | null): string => {
   if (!src) return '';
   if (src.startsWith('http')) return src;
-  // Local path like /uploads/filename.jpg — prepend backend origin
   return `${BASE}${src.startsWith('/') ? '' : '/'}${src}`;
 };
 
 const api = axios.create({
   baseURL: `${BASE}/api`,
-  withCredentials: true,  // ✅ Changed to true for cookies
+  withCredentials: true,
   timeout: 30000,
+  headers: {
+    'Content-Type': 'application/json',
+  }
 });
 
 api.interceptors.request.use((config) => {
@@ -44,17 +50,20 @@ api.interceptors.request.use((config) => {
   }
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type'];
-  } else if (!config.headers['Content-Type']) {
-    config.headers['Content-Type'] = 'application/json';
   }
-  // Debug: log every outgoing request URL
-  console.log(`🌐 API ${config.method?.toUpperCase()} → ${config.baseURL}${config.url}`, token ? '🔑 token present' : '🔓 no token');
+  console.log(`🌐 API ${config.method?.toUpperCase()} → ${config.baseURL}${config.url}`);
+  console.log(`   Headers:`, { Authorization: token ? '✅ Bearer token' : '❌ No token' });
   return config;
 });
 
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    console.log(`✅ Response [${res.status}]:`, res.data);
+    return res;
+  },
   (err) => {
+    console.error(`❌ Error [${err.response?.status}]:`, err.response?.data || err.message);
+    
     if (err.response?.status === 401 && typeof window !== 'undefined') {
       const p = window.location.pathname;
       const pub = ['/login', '/register', '/verify-email', '/forgot-password', '/reset-password'];
