@@ -9,166 +9,88 @@ const cookieParser = require('cookie-parser');
 
 const app    = express();
 const server = http.createServer(app);
-const isProd = process.env.NODE_ENV === 'production';
 
 console.log('\n' + '='.repeat(70));
-console.log('🚀 STARTING SERVER');
+console.log('🚀 BEAST CRICKET AUCTION - SERVER STARTING');
 console.log('='.repeat(70));
 
 // ── CORS ─────────────────────────────────
-const corsOptions = {
+app.use(cors({
   origin: '*',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
-};
+}));
+app.options('*', cors());
 
-console.log('✅ CORS enabled for all origins');
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+console.log('✅ CORS: Enabled for all origins');
 
-// ── Body Parsing ─────────────────────────
+// ── Middleware ──────────────────────────
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-console.log('✅ Body parsing configured');
-
-// ── Debug Middleware ─────────────────────
+// ── Debug Logger ────────────────────────
 app.use((req, res, next) => {
-  console.log(`\n📨 [${new Date().toLocaleTimeString()}] ${req.method.toUpperCase()} ${req.path}`);
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log(`   📦 Body:`, req.body);
-  }
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const status = res.statusCode >= 400 ? '❌' : '✅';
+    console.log(`${status} [${res.statusCode}] ${req.method.toUpperCase().padEnd(6)} ${req.path.padEnd(30)} ${duration}ms`);
+  });
   next();
 });
 
-// ── Health Check ─────────────────────────
-app.get('/health', (req, res) => {
-  console.log('   ✅ Health check');
-  res.json({ ok: true, time: new Date().toISOString() });
-});
+// ── Health Endpoints ────────────────────
+app.get('/health', (req, res) => res.json({ ok: true }));
+app.get('/api/health', (req, res) => res.json({ ok: true, db: mongoose.connection.readyState === 1 }));
+app.get('/', (req, res) => res.json({ message: 'BCA Server OK' }));
 
-app.get('/api/health', (req, res) => {
-  console.log('   ✅ API Health check');
-  res.json({ ok: true, mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
-});
+// ── Routes ──────────────────────────────
+console.log('📍 Loading routes...');
 
-// ── Root Endpoint ────────────────────────
-app.get('/', (req, res) => {
-  console.log('   ✅ Root endpoint');
-  res.json({ 
-    message: 'BCA Auction API',
-    status: 'running',
-    endpoints: ['/health', '/api/health', '/api/auth/login', '/api/auth/register']
-  });
-});
+const authRouter = require('./routes/auth');
+app.use('/api/auth', authRouter);
+console.log('✅ /api/auth');
 
-// ── Auth Routes ──────────────────────────
-console.log('📍 Loading auth routes...');
+const auctionsRouter = require('./routes/auctions');
+app.use('/api/auctions', auctionsRouter);
+console.log('✅ /api/auctions');
 
-try {
-  const authRouter = require('./routes/auth');
-  app.use('/api/auth', authRouter);
-  console.log('✅ Auth routes loaded on /api/auth');
-} catch (err) {
-  console.error('❌ Error loading auth routes:', err.message);
-  console.error(err.stack);
-}
+const adminRouter = require('./routes/admin');
+app.use('/api/admin', adminRouter);
+console.log('✅ /api/admin');
 
-// ── Auctions Routes ──────────────────────
-console.log('📍 Loading auctions routes...');
-
-try {
-  const auctionsRouter = require('./routes/auctions');
-  app.use('/api/auctions', auctionsRouter);
-  console.log('✅ Auctions routes loaded on /api/auctions');
-} catch (err) {
-  console.error('❌ Error loading auctions routes:', err.message);
-}
-
-// ── Admin Routes ─────────────────────────
-console.log('📍 Loading admin routes...');
-
-try {
-  const adminRouter = require('./routes/admin');
-  app.use('/api/admin', adminRouter);
-  console.log('✅ Admin routes loaded on /api/admin');
-} catch (err) {
-  console.error('❌ Error loading admin routes:', err.message);
-}
-
-// ── 404 Handler ──────────────────────────
+// ── 404 & Errors ────────────────────────
 app.use((req, res) => {
-  console.log(`   ❌ 404: Route not found`);
-  res.status(404).json({ 
-    error: `${req.method} ${req.path} not found`,
-    message: 'Check /health or /api/health for server status',
-    available: [
-      'GET  /health',
-      'GET  /api/health',
-      'POST /api/auth/login',
-      'POST /api/auth/register',
-      'GET  /api/auctions/*',
-      'GET  /api/admin/*'
-    ]
-  });
+  res.status(404).json({ error: 'Not found', path: req.path, method: req.method });
 });
 
-// ── Error Handler ────────────────────────
 app.use((err, req, res, next) => {
-  console.error(`   ❌ Error:`, err.message);
-  res.status(err.status || 500).json({ 
-    error: err.message,
-    ...(isProd ? {} : { stack: err.stack })
-  });
+  console.error('❌ Error:', err.message);
+  res.status(err.status || 500).json({ error: err.message });
 });
 
-// ── MongoDB Connection ───────────────────
+// ── MongoDB ─────────────────────────────
 const MONGODB_URI = process.env.MONGODB_URI;
-
 if (!MONGODB_URI) {
-  console.error('❌ MONGODB_URI environment variable not set!');
+  console.error('❌ MONGODB_URI not set');
   process.exit(1);
 }
 
-console.log('📊 Connecting to MongoDB...');
-
-mongoose.connect(MONGODB_URI, {
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
-})
-.then(() => {
-  console.log('✅ MongoDB connected');
-  
-  // Start server
-  const PORT = process.env.PORT || 5000;
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log('\n' + '='.repeat(70));
-    console.log('✨ SERVER IS READY');
-    console.log('='.repeat(70));
-    console.log(`🌍 Listening on port ${PORT}`);
-    console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`📍 Base URL: http://0.0.0.0:${PORT}`);
-    console.log('\nTest endpoints:');
-    console.log(`  - http://localhost:${PORT}/health`);
-    console.log(`  - http://localhost:${PORT}/api/health`);
-    console.log(`  - POST http://localhost:${PORT}/api/auth/login`);
-    console.log('='.repeat(70) + '\n');
-  });
-})
-.catch(err => {
-  console.error('❌ Failed to connect to MongoDB:', err.message);
-  console.error('Make sure MONGODB_URI is correct');
-  process.exit(1);
-});
-
-process.on('SIGTERM', () => {
-  console.log('\n⚠️  SIGTERM received, shutting down...');
-  server.close(() => {
-    mongoose.connection.close(false, () => {
-      console.log('✅ Server closed gracefully');
-      process.exit(0);
+mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
+  .then(() => {
+    console.log('✅ MongoDB: Connected');
+    const PORT = process.env.PORT || 5000;
+    server.listen(PORT, '0.0.0.0', () => {
+      console.log('='.repeat(70));
+      console.log(`🌍 Server ready on port ${PORT}`);
+      console.log(`🌐 Frontend: https://beastbca-client-production.up.railway.app`);
+      console.log(`📊 Backend: https://beastbca-server-production.up.railway.app`);
+      console.log('='.repeat(70) + '\n');
     });
+  })
+  .catch(err => {
+    console.error('❌ MongoDB failed:', err.message);
+    process.exit(1);
   });
-});
