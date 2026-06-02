@@ -34,7 +34,7 @@ const ROLES = [
     id: 'viewer',
     icon: 'user',
     label: 'Viewer',
-    color: 'from-emerald-500/30 to-green-600/10',
+    color: 'from-emerald-500/30 to-blue-600/10',
     tagline: 'Live Arena Access',
   },
 ];
