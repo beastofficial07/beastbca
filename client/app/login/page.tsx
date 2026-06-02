@@ -20,7 +20,7 @@ const ROLES = [
     id: 'organizer',
     icon: 'gavel',
     label: 'Organizer',
-    color: 'from-amber-500/30 to-yellow-600/10',
+    color: 'from-amber-500/30 to-goldenyellow-600/10',
     tagline: 'Command Center Access',
   },
   {
@@ -34,7 +34,7 @@ const ROLES = [
     id: 'viewer',
     icon: 'user',
     label: 'Viewer',
-    color: 'from-emerald-500/30 to-blue-600/10',
+    color: 'from-blue-500/30 to-blue-600/10',
     tagline: 'Live Arena Access',
   },
 ];
