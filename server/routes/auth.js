@@ -5,7 +5,7 @@ const User     = require('../models/User');
 
 const { generateAccessToken, generateRefreshToken, setCookieAndRespond } = require('../utils/jwt');
 const { authenticate } = require('../middleware/auth');
-const { isEmailConfigured, sendVerificationEmail, sendPasswordResetEmail } = require('../utils/email');
+const { isEmailConfigured, verifyTransporter, sendVerificationEmail, sendPasswordResetEmail } = require('../utils/email');
 
 const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'hirishi2020@gmail.com').toLowerCase();
 
@@ -37,11 +37,19 @@ router.post('/register', async (req, res) => {
     await user.save();
     console.log('✅ User registered:', emailClean);
 
-    if (!isAdmin && isEmailConfigured()) {
-      try {
-        await sendVerificationEmail(emailClean, name, rawToken);
-      } catch (e) {
-        console.error('Email failed (non-fatal):', e.message);
+    if (!isAdmin) {
+      if (isEmailConfigured()) {
+        console.log(`📧 [REGISTER] Sending verification email to ${emailClean} …`);
+        try {
+          await sendVerificationEmail(emailClean, name, rawToken);
+          console.log(`✅ [REGISTER] Verification email dispatched to ${emailClean}`);
+        } catch (e) {
+          console.error(`❌ [REGISTER] Verification email FAILED for ${emailClean}:`, e.message);
+          console.error('   Code :', e.code);
+          console.error('   Stack:', e.stack);
+        }
+      } else {
+        console.warn('⚠️  [REGISTER] Email not configured — skipping verification email for', emailClean);
       }
     }
 
@@ -153,10 +161,14 @@ router.post('/forgot-password', async (req, res) => {
       { $set: { resetToken: hashedToken, resetTokenExpiry: new Date(Date.now() + 60 * 60 * 1000) } }
     );
 
+    console.log(`📧 [FORGOT-PASSWORD] Sending reset email to ${emailClean} …`);
     try {
       await sendPasswordResetEmail(emailClean, user.name, rawToken);
+      console.log(`✅ [FORGOT-PASSWORD] Reset email dispatched to ${emailClean}`);
     } catch (e) {
-      console.error('Reset email failed:', e.message);
+      console.error(`❌ [FORGOT-PASSWORD] Reset email FAILED for ${emailClean}:`, e.message);
+      console.error('   Code :', e.code);
+      console.error('   Stack:', e.stack);
     }
 
     return res.json({ success: true, message: 'Reset link sent' });
@@ -279,6 +291,38 @@ router.delete('/account', authenticate, async (req, res) => {
   } catch (err) {
     console.error('Delete account error:', err.message);
     return res.status(500).json({ error: 'Delete failed' });
+  }
+});
+
+// ── EMAIL HEALTH CHECK ────────────────────────────────────
+router.get('/email-health', async (req, res) => {
+  const configured = isEmailConfigured();
+
+  if (!configured) {
+    return res.status(503).json({
+      ok: false,
+      configured: false,
+      message: 'Email is not configured — EMAIL_USER or EMAIL_PASS env vars are missing',
+    });
+  }
+
+  console.log('🩺 [EMAIL-HEALTH] Running SMTP verification check …');
+  const smtpOk = await verifyTransporter().catch(() => false);
+
+  if (smtpOk) {
+    return res.json({
+      ok: true,
+      configured: true,
+      smtp: 'connected',
+      message: 'Email service is healthy and ready to send',
+    });
+  } else {
+    return res.status(503).json({
+      ok: false,
+      configured: true,
+      smtp: 'failed',
+      message: 'Email is configured but SMTP connection verification failed — check credentials and Gmail App Password',
+    });
   }
 });
 
