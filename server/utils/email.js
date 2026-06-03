@@ -5,8 +5,8 @@
 const nodemailer = require('nodemailer');
 
 // ─── Gmail SMTP Configuration ───────────────────────────────────────────────
-const EMAIL_USER = process.env.EMAIL_USER || 'beastcricketofficialauction@gmail.com';
-const EMAIL_PASS = process.env.EMAIL_PASS || 'gdgz afbz oyjm grxx'; // Gmail App Password (WITH spaces — required by Gmail)
+const EMAIL_USER = process.env.EMAIL_USER || 'beastauctionofficial@gmail.com';
+const EMAIL_PASS = process.env.EMAIL_PASS || 'shvn bsuq ahdv cyjp'; // Gmail App Password (WITH spaces — required by Gmail)
 const EMAIL_HOST = process.env.EMAIL_HOST || 'smtp.gmail.com';
 const EMAIL_PORT = process.env.EMAIL_PORT || 465;
 
@@ -34,7 +34,7 @@ function isEmailConfigured() {
 // Resolves true on success, false on failure. Safe to call at startup.
 async function verifyTransporter() {
   console.log('═══════════════════════════════════════════════════════');
-  console.log('🔍 Verifying SMTP connection to smtp.gmail.com:465 …');
+  console.log(`🔍 Verifying SMTP connection to ${EMAIL_HOST}:${EMAIL_PORT} …`);
   console.log(`   User : ${EMAIL_USER}`);
   console.log('═══════════════════════════════════════════════════════');
 
@@ -46,7 +46,7 @@ async function verifyTransporter() {
         console.log('   Code    :', error.code);
         console.log('');
         console.log('TROUBLESHOOTING:');
-        console.log('  1. Confirm the Gmail App Password includes spaces: gdgz afbz oyjm grxx');
+        console.log('  1. Confirm the Gmail App Password includes spaces: shvn bsuq ahdv cyjp');
         console.log('  2. Ensure 2-Step Verification is enabled on the Gmail account');
         console.log('  3. Regenerate the App Password if needed (Google Account → Security → App Passwords)');
         console.log('  4. Make sure "Less Secure Apps" is OFF — we use App Password, not account password');

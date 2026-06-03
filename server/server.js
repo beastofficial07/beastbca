@@ -112,8 +112,17 @@ if (!MONGODB_URI) {
 }
 
 mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
-  .then(() => {
+  .then(async () => {
     console.log('✅ MongoDB connected');
+
+    // ── Email SMTP startup check ──────────────────────────
+    try {
+      const { verifyTransporter } = require('./utils/email');
+      await verifyTransporter();
+    } catch (e) {
+      console.error('⚠️  Email startup check threw unexpectedly:', e.message);
+    }
+
     const PORT = process.env.PORT || 5000;
     server.listen(PORT, '0.0.0.0', () => {
       console.log('='.repeat(70));
