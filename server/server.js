@@ -93,6 +93,13 @@ try {
   console.error('❌ Admin error:', e.message);
 }
 
+try {
+  app.use('/api/payments', require('./routes/payments'));
+  console.log('✅ Payments routes');
+} catch (e) {
+  console.error('❌ Payments error:', e.message);
+}
+
 // ── 404 & Error ───────────────────────────
 app.use((req, res) => {
   console.log('❌ 404:', req.method, req.path);
