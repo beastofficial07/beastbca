@@ -25,8 +25,8 @@ const isProd = process.env.NODE_ENV === 'production';
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:5173',
-  process.env.FRONTEND_URL,
-  'https://bca-auction-production-1.up.railway.app', // ✅ Add your Railway frontend URL
+  'https://beastbca-client-production.up.railway.app', // ✅ CORRECT PRODUCTION URL
+  process.env.FRONTEND_URL, // ✅ Allow override via env var
 ].filter(Boolean);
 
 console.log('🌐 Allowed CORS origins:', allowedOrigins);
@@ -214,10 +214,13 @@ mongoose.connect(MONGODB_URI, {
 // ── Graceful shutdown ───────────────────
 process.on('SIGTERM', () => {
   console.log('SIGTERM received, closing server...');
-  server.close(() => {
-    mongoose.connection.close(false, () => {
+  server.close(async () => {
+    try {
+      await mongoose.connection.close(false);
       console.log('MongoDB connection closed');
-      process.exit(0);
-    });
+    } catch (err) {
+      console.error('Error closing MongoDB:', err.message);
+    }
+    process.exit(0);
   });
 });
